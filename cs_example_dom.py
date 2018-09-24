@@ -122,7 +122,7 @@ def send_move(pos):
 
 def main(stdscr):
     # username = get_username(stdscr)
-
+    curses.curs_set(0)
     print("Waiting for player 2")
     while True: # Wait for server to ask for username
         response = s.recv(2048).decode('utf-8')
