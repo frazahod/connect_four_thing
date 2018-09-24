@@ -31,7 +31,6 @@ scr_lock = threading.Lock()
 def print_board(board_window, board_str):
     # board_window.clear()
     scr_lock.acquire(blocking=True)
-    board_window.clear()
     board_window.addstr(1, 0, board_str)
     board_window.refresh()
     scr_lock.release()
@@ -88,7 +87,7 @@ def recv_windows(stdcr):
             print_board(board_window, board_str)
         elif (tag == 'message'):
             wrap_count += (len(msg) / 30) + 1
-            chat_string = chat_string + '\n' + msg + str(chat_pad_pos) # https://stackoverflow.com/a/2523020/3754128 link for chat scrolling
+            chat_string = chat_string + '\n' + msg # https://stackoverflow.com/a/2523020/3754128 link for chat scrolling
             if wrap_count >= 41: # I have literally zero idea why this is the correct number
                 chat_pad_pos += 1
             print_chat(chat_pad, chat_string, chat_pad_pos)
@@ -103,9 +102,9 @@ def move_curser(pos, move_window):
     scr_lock.release()
 
 def print_chat_entry(stdscr):
-    chat_win = curses.newwin(2,32, 32,35)
-    chat_win.addstr(0, 0, "Message")
-    chat_subwin = chat_win.subwin(1, 32, 33, 35)
+    chat_win = curses.newwin(4,32, 32,35)
+    chat_win.addstr(0, 0, "Message (ctrl-g to send)")
+    chat_subwin = chat_win.subwin(3, 32, 33, 35)
     chat_win.refresh()
     chat_textbox = curses.textpad.Textbox(chat_subwin)
     chat_textbox.edit()
@@ -124,10 +123,10 @@ def send_move(pos):
 def main(stdscr):
     # username = get_username(stdscr)
 
+    print("Waiting for player 2")
     while True: # Wait for server to ask for username
         response = s.recv(2048).decode('utf-8')
         if response:
-            print("response " + response)
             tag, msg = response.split('::', 1)  # Only splits on first instance of delimiter
             # print_board(board_window, msg)
             if (tag == 'name'):

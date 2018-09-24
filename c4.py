@@ -48,8 +48,6 @@ def accept_connections():
         else:
             logging.info('player2 found')
             pair = (pending_connections[0], client_connection)
-            # TODO Handle the logic for this properly later
-            # if safe_send(pair[0][0], (MESSAGE + 'Game found!').encode('ascii')) or safe_send(pair[1][0], (MESSAGE + 'Game found!').encode('ascii')):
             pending_connections.pop()
             game_thread = gameThread(pair)
             logging.info('Starting game Thread')
@@ -92,7 +90,7 @@ class Player():
             return err
 
     def queue_message(self, prefix, message):
-        logging.info('added message to queue ' + message)
+        # logging.info('added message to queue ' + message)
         self.message_queue.append(prefix + message)
 
     def empty_queue(self):
@@ -174,7 +172,8 @@ class gameThread(threading.Thread):
                     player.empty_queue()
 
             for con in exceptional:
-                pass #ERROR HANDLING GOES HERE
+                player = self.player_map[con.fileno()]
+                self.other.queue_message(MESSAGE, player.name + " has disconnected")
 
 
     def send_encoded_all(self, prefix, message):
@@ -196,7 +195,6 @@ def add_to_board(board, row, player):
         if item == '.':
             brow[idx] = player
             break
-    print(board)
 
 
 
