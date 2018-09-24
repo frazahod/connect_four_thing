@@ -5,34 +5,43 @@ from curses.textpad import Textbox
 import socket
 import threading
 import subprocess
+import getpass
 
 
 import time
 
+user = getpass.getuser()
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect(('localhost', 8191))
 socket_lock = threading.Lock()
+scr_lock = threading.Lock()
 
-def get_username(stdscr):
-    username_win = curses.newwin(2,32, 0,0)
-    username_win.addstr(0, 0, "Please enter your username:")
-    username_subwin = username_win.subwin(1, 32, 1, 0)
-    username_win.refresh()
-    username_textbox = curses.textpad.Textbox(username_subwin)  
-    username_textbox.edit()
-    username = username_textbox.gather()
-    del username_win
-    stdscr.refresh() 
-    return username 
+# def get_username(stdscr):
+#     username_win = curses.newwin(2,32, 0,0)
+#     username_win.addstr(0, 0, "Please enter your username:")
+#     username_subwin = username_win.subwin(1, 32, 1, 0)
+#     username_win.refresh()
+#     username_textbox = curses.textpad.Textbox(username_subwin)
+#     username_textbox.edit()
+#     username = username_textbox.gather()
+#     del username_win
+#     stdscr.refresh()
+#     return username
 
 def print_board(board_window, board_str):
     # board_window.clear()
-    board_window.addstr(1, 1, board_str)
+    scr_lock.acquire(blocking=True)
+    board_window.clear()
+    board_window.addstr(1, 0, board_str)
     board_window.refresh()
+    scr_lock.release()
 
 def print_chat(chat_pad, chat_str, chat_pad_pos):# Very naive implementation
+    scr_lock.acquire(blocking=True)
     chat_pad.addstr(0, 0, chat_str)
     chat_pad.refresh(chat_pad_pos, 0, 1, 36, 30, 66)
+    scr_lock.release()
+
 
 # def print_debug_msg(stdscr, BOARD_HEIGHT, msg):
 
@@ -45,7 +54,8 @@ class recvThread(threading.Thread):
         recv_windows(self.stdcr)
 
 def recv_windows(stdcr):
-    BOARD_WINDOW_NLINES = 32
+    scr_lock.acquire(blocking=True)
+    BOARD_WINDOW_NLINES = 16
     BOARD_WINDOW_NCOLS = 32
     board_window = curses.newwin(BOARD_WINDOW_NLINES, BOARD_WINDOW_NCOLS, 0, 0)
     board_window.border()
@@ -62,11 +72,12 @@ def recv_windows(stdcr):
     chat_pad = curses.newpad(1000, 30)
     chat_pad_pos = 0
     chat_pad.refresh(chat_pad_pos, 0, 1, 36,30,66)
+    scr_lock.release()
 
     # HOW TO RECV
 
     wrap_count = 0
-
+    # time.sleep(25)
     while True:
         socket_lock.acquire(blocking=True)
         response = s.recv(2048).decode('utf-8')
@@ -81,53 +92,74 @@ def recv_windows(stdcr):
             if wrap_count >= 41: # I have literally zero idea why this is the correct number
                 chat_pad_pos += 1
             print_chat(chat_pad, chat_string, chat_pad_pos)
-        time.sleep(.25)
 
+
+def move_curser(pos, move_window):
+    scr_lock.acquire(blocking=True)
+    move_window.clear()
+    move_window.addstr(1, pos, '^')
+    move_window.addstr(2, pos, '^')
+    move_window.refresh()
+    scr_lock.release()
+
+def print_chat_entry(stdscr):
+    chat_win = curses.newwin(2,32, 32,35)
+    chat_win.addstr(0, 0, "Message")
+    chat_subwin = chat_win.subwin(1, 32, 33, 35)
+    chat_win.refresh()
+    chat_textbox = curses.textpad.Textbox(chat_subwin)
+    chat_textbox.edit()
+    message = chat_textbox.gather()
+    stdscr.refresh()
+    return message
+
+def send_message(message):
+    # socket_lock.acquire(blocking=True)
+    s.send(('message::' + message).encode('ascii'))
+    # socket_lock.release()
+
+def send_move(pos):
+    s.send(('move::' + str(pos)).encode('ascii'))
 
 def main(stdscr):
-    username = get_username(stdscr)
+    # username = get_username(stdscr)
 
-    while True:
+    while True: # Wait for server to ask for username
         response = s.recv(2048).decode('utf-8')
-        tag, msg = response.split('::', 1)  # Only splits on first instance of delimiter
-        print_board(board_window, msg)
-        if (tag == 'name'):
-            s.send(('name::' + username).encode('ascii'))
-        break
+        if response:
+            print("response " + response)
+            tag, msg = response.split('::', 1)  # Only splits on first instance of delimiter
+            # print_board(board_window, msg)
+            if (tag == 'name'):
+                # print("server asked for name, sending")
+                s.send(('name::' + user).encode('ascii'))
+                break
 
 
-    # response = s.recv(2048).decode('utf-8')
-    # tag, msg = response.split('::', 1)  # Only splits on first instance of delimiter
-
-    tag = 'name'
-
-    # print_board(board_window, msg)
-    # if (tag == 'name'):
-    #     s.send(('name::' + username).encode('ascii'))
     recv_thread = recvThread(stdscr)
     recv_thread.start()
 
-    move_window = curses.newwin(4, 32, 35, 0)
-    move_window.border()
-    move_window.refresh()
+    arrow_pos = 0
+    move_window = curses.newwin(4, 32, 7, 0)
+    move_curser(arrow_pos, move_window)
     #TODO need to make sure cursor ends up here. Mitigated by using stdscr?
     while True:
         key = stdscr.getkey()
-        if key == curses.KEY_LEFT:
-            #move indicator left
-            pass
-        elif key == curses.KEY_RIGHT:
-            # move indicator right
-            pass
-        elif key == curses.KEY_ENTER:
+        if key == "KEY_LEFT":
+            arrow_pos = (arrow_pos - 4) if arrow_pos > 3 else 24
+            move_curser(arrow_pos, move_window)
+        elif key == "KEY_RIGHT":
+            arrow_pos = (arrow_pos + 4) if arrow_pos < 21 else 0
+            move_curser(arrow_pos, move_window)
+        elif key == '\n':
             # get selected colomn and send to server
+            send_move(int(arrow_pos / 4))
             pass
         elif key == "c":
-            # move focus to chat text box and get input from there. Probably use textbox
-            pass
+            send_message(print_chat_entry(stdscr))
 
 
-    time.sleep(10)
+
     recv_thread.join()
     
 wrapper(main)

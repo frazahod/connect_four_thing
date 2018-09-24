@@ -49,10 +49,8 @@ def accept_connections():
             logging.info('player2 found')
             pair = (pending_connections[0], client_connection)
             # TODO Handle the logic for this properly later
-            if safe_send(pair[0][0], (MESSAGE + 'Game found!').encode('ascii')) or safe_send(pair[1][0], (MESSAGE + 'Game found!').encode('ascii')):
-                pending_connections.pop()
-            # pair[0][0].send((MESSAGE + 'Game found!').encode('ascii'))
-            # pair[1][0].send((MESSAGE + 'Game found!').encode('ascii'))
+            # if safe_send(pair[0][0], (MESSAGE + 'Game found!').encode('ascii')) or safe_send(pair[1][0], (MESSAGE + 'Game found!').encode('ascii')):
+            pending_connections.pop()
             game_thread = gameThread(pair)
             logging.info('Starting game Thread')
             game_thread.start()
@@ -88,14 +86,19 @@ class Player():
 
     def send_encoded(self, prefix, message):
         logging.info('sending message')
-        self.connection[0].send((prefix + message).encode('ascii'))
+        try:
+            self.connection[0].send((prefix + message).encode('ascii'))
+        except socket.error as err:
+            return err
 
-    def queue_message(self, message):
-        self.message_queue.append(message)
+    def queue_message(self, prefix, message):
+        logging.info('added message to queue ' + message)
+        self.message_queue.append(prefix + message)
 
     def empty_queue(self):
         for message in self.message_queue:
             self.connection[0].send(message.encode('ascii'))
+        self.message_queue = []
 
 
 
@@ -106,9 +109,9 @@ class gameThread(threading.Thread):
     def __init__(self, connections):
         threading.Thread.__init__(self)
         self.connections = connections
-        self.board = [[0 for j in range(6)] for i in range(7)]
-        self.player1 = Player(connections[0], '0')
-        self.player2 = Player(connections[1], '#')
+        self.board = [['.' for j in range(6)] for i in range(7)]
+        self.player1 = Player(connections[0], '#')
+        self.player2 = Player(connections[1], '@')
         self.player_map = {
             connections[0][0].fileno(): self.player1,
             connections[1][0].fileno(): self.player2
@@ -123,13 +126,13 @@ class gameThread(threading.Thread):
     # TODO This should really be using message queues in order to fully take advantage of the selector. That would be a good next step.
     # Added skeleton for this in Player class. Still need to get client working first though.
     def start_game(self):
-        self.player1.send_encoded(NAME, 'username')
-        self.player2.send_encoded(NAME, 'username')
+        self.player1.queue_message(NAME, 'username')
+        self.player2.queue_message(NAME, 'username')
         inputs = [self.player1.get_connection(), self.player2.get_connection()]
         outputs = []
         while not self.shutting_down:
-            readable, writable, exceptional = select.select(inputs, outputs, [])
-            print(self.player_map)
+            readable, writable, exceptional = select.select(inputs, inputs, inputs)
+            # print(self.player_map)
             for con in readable:
                 player = self.player_map[con.fileno()]
                 response = player.get_response()
@@ -138,23 +141,17 @@ class gameThread(threading.Thread):
                         logging.info('got name')
                         player.set_name(response.replace(NAME, ''))
                         if self.player1.get_name() and self.player2.get_name():
-                            try:
-                                self.player2.send_encoded(MESSAGE, 'Connected with ' + self.player1.get_name())
-                                self.player1.send_encoded(MESSAGE, 'Connected with ' + self.player2.get_name())
-                            except socket.error as err:
-                                logging.error("Socket error" + err.message)
+                            self.player1.queue_message(MESSAGE, 'Connected with ' + self.player1.get_name())
+                            self.player2.queue_message(MESSAGE, 'Connected with ' + self.player1.get_name())
+                            self.send_encoded_all(BOARD, stringy(self.board))
 
                     elif MOVE in response:
                         logging.info('got move')
                         if player == self.turn:
                             position = int(response.replace(MOVE, '')) #TODO check that position is valid
+                            logging.info('position: ' + str(position))
                             add_to_board(self.board, position, player.get_icon())
-                            try:
-                                self.send_encoded_all(BOARD, self.board)
-                            except socket.error as err:
-                                logging.error("Socket error" + err.message)
-                                player.send_encoded(MESSAGE, "Lost connection with other player. Ending game.")
-                                self.shutting_down = True
+                            self.send_encoded_all(BOARD, stringy(self.board))
                             self.turn = self.other(player)
                         else:
                             player.send_encoded(MESSAGE, "Wait your damn turn!")
@@ -164,24 +161,26 @@ class gameThread(threading.Thread):
                         self.send_encoded_all(MESSAGE, to_send)
                     elif QUIT in response:
                         logging.info('got quit')
-                        try:
-                            self.send_encoded_all(MESSAGE, player.get_name() + ' gave up........like the pansy they are!')
-                        except socket.error as err:
-                            logging.error("Socket error" + err.message)
+                        self.send_encoded_all(MESSAGE, player.get_name() + ' gave up........like the pansy they are!')
                         self.shutting_down = True
                 else:
-                    try:
-                        player.send_encoded(MESSAGE, self.other(player).get_name() + " closed connection. Ending game.")
-                    except socket.error as err:
-                        logging.error("Socket error" + err.message)
-                    finally:
-                        self.shutting_down = True
+                    player.queue_message(MESSAGE, self.other(player).get_name() + " closed connection. Ending game.")
+                    self.shutting_down = True
+
+            for con in writable:
+                player = self.player_map[con.fileno()]
+                if player.message_queue:
+                    logging.info("Writing to player")
+                    player.empty_queue()
+
+            for con in exceptional:
+                pass #ERROR HANDLING GOES HERE
 
 
     def send_encoded_all(self, prefix, message):
         logging.info('Sending to all')
-        self.player1.send_encoded(prefix, message)
-        self.player2.send_encoded(prefix, message)
+        self.player1.queue_message(prefix, message)
+        self.player2.queue_message(prefix, message)
 
     def other(self, player):
         if player.get_connection().fileno() == self.player1.get_connection().fileno():
@@ -194,25 +193,26 @@ class gameThread(threading.Thread):
 def add_to_board(board, row, player):
     brow = board[row]
     for idx,item in enumerate(brow):
-        if item == 0:
+        if item == '.':
             brow[idx] = player
             break
+    print(board)
 
 
 
 def stringy(array):
-    temp = [0,1,2,3,4,5,6]
-    list1 = ''.join(['{:4}'.format(item) for item in temp]) + '\n\n'
+    # temp = [0, 1, 2, 3, 4, 5, 6]
+    # list1 = ''.join(['{:4}'.format(item) for item in temp]) + '\n\n'
     array = reversed(list(zip(*array)))
-    return list1 + '\n'.join([''.join(['{:4}'.format(item) for item in row])
-      for row in array])
+    return '\n'.join([''.join(['{:4}'.format(item) for item in row])
+                              for row in array])
 
 def print_array(array):
     array = reversed(list(zip(*array)))
     print('\n'.join([''.join(['{:4}'.format(item) for item in row])
       for row in array]))
 
-logging.basicConfig(format='%(levelname)s:%(pathname)s:%(lineno)d %(message)s', stream=sys.stdout, level=logging.DEBUG)
+logging.basicConfig(format='%(levelname)s:%(pathname)s:%(lineno)d %(message)s', stream=sys.stdout, level=logging.INFO)
 accept_connections()
 
 
