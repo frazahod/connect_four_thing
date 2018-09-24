@@ -6,15 +6,22 @@ import socket
 import threading
 import subprocess
 import getpass
-
-
+import signal
 import time
+import sys
+
 
 user = getpass.getuser()
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.connect(('localhost', 8191))
+s.connect(('fxdeva11', 8191))
 socket_lock = threading.Lock()
 scr_lock = threading.Lock()
+
+
+def handler(signum, frame):
+    print('signal handler called')
+    s.send(('quit::' + 'SIGTERM').encode('ascii'))
+    sys.exit(0)
 
 def print_board(board_window, board_str):
     # board_window.clear()
@@ -105,7 +112,7 @@ def print_chat_entry(stdscr):
 
 def send_message(message):
     # socket_lock.acquire(blocking=True)
-    s.send(('message::' + message).encode('ascii'))
+    s.send(('message::' + message).encode('ascii')) # POSIX something something, atomic something something.
     # socket_lock.release()
 
 def send_move(pos):
@@ -146,8 +153,12 @@ def main(stdscr):
             send_move(int(arrow_pos / 4))
             pass
         elif key == "c":
-            send_message(print_chat_entry(stdscr))
-
+            message = print_chat_entry(stdscr)
+            if '!quit' in message:
+                s.send(('quit::' + 'SIGTERM').encode('ascii'))
+                sys.exit(0)
+            else:
+                send_message(message)
 
 
     recv_thread.join()
