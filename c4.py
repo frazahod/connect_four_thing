@@ -5,10 +5,6 @@ import select
 import logging
 import sys
 
-# board = [[0 for j in range(6)] for i in range(7)]
-
-
-
 turn = ''
 
 MESSAGE = 'message::'
@@ -44,7 +40,7 @@ def accept_connections():
         if not pending_connections:
             logging.info('waiting for player2')
             pending_connections.append(client_connection)
-            client_connection[0].send((MESSAGE + 'Waiting for other player...').encode('ascii'))
+            client_connection[0].send((MESSAGE + 'Waiting for other player...').encode('ascii')) # TODO: Not this
         else:
             logging.info('player2 found')
             pair = (pending_connections[0], client_connection)
@@ -121,8 +117,7 @@ class gameThread(threading.Thread):
         logging.info('Thread has started')
         self.start_game()
 
-    # TODO This should really be using message queues in order to fully take advantage of the selector. That would be a good next step.
-    # Added skeleton for this in Player class. Still need to get client working first though.
+
     def start_game(self):
         self.player1.queue_message(NAME, 'username')
         self.player2.queue_message(NAME, 'username')
@@ -172,6 +167,7 @@ class gameThread(threading.Thread):
                     player.empty_queue()
 
             for con in exceptional:
+                logging.info("Man, I wonder what actually triggers this.")
                 player = self.player_map[con.fileno()]
                 self.other.queue_message(MESSAGE, player.name + " has disconnected")
 

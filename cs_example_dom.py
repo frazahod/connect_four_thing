@@ -92,9 +92,9 @@ def move_curser(pos, move_window):
 
 def print_chat_entry(stdscr):
     curses.curs_set(1)
-    chat_win = curses.newwin(4,32, 32,35)
+    chat_win = curses.newwin(4,32, 11,0)
     chat_win.addstr(0, 0, "Message (ctrl-g to send)")
-    chat_subwin = chat_win.subwin(3, 32, 33, 35)
+    chat_subwin = chat_win.subwin(3, 32, 12, 0)
     chat_win.refresh()
     chat_textbox = curses.textpad.Textbox(chat_subwin)
     chat_textbox.edit()
