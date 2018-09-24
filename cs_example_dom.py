@@ -9,6 +9,7 @@ import getpass
 import signal
 import time
 import sys
+import textwrap
 
 
 user = getpass.getuser()
@@ -82,6 +83,7 @@ def recv_windows(stdcr):
             board_str = msg
             print_board(board_window, board_str)
         elif (tag == 'message'):
+            msg = textwrap.fill(msg, 32)
             wrap_count += (len(msg) / 30) + 1
             chat_string = chat_string + '\n' + msg # https://stackoverflow.com/a/2523020/3754128 link for chat scrolling
             if wrap_count >= 41: # I have literally zero idea why this is the correct number
@@ -98,17 +100,19 @@ def move_curser(pos, move_window):
     scr_lock.release()
 
 def print_chat_entry(stdscr):
+    scr_lock.acquire(blocking=True)
     curses.curs_set(1)
-    chat_win = curses.newwin(4,32, 11,0)
+    chat_win = curses.newwin(4,32, 12,0)
     chat_win.addstr(0, 0, "Message (ctrl-g to send)")
-    chat_subwin = chat_win.subwin(3, 32, 12, 0)
+    chat_subwin = chat_win.subwin(3, 32, 13, 0)
     chat_win.refresh()
     chat_textbox = curses.textpad.Textbox(chat_subwin)
     chat_textbox.edit()
     message = chat_textbox.gather()
     curses.curs_set(0)
     stdscr.refresh()
-    return message
+    scr_lock.release()
+    return message.replace('\n', '')
 
 def send_message(message):
     # socket_lock.acquire(blocking=True)
@@ -137,7 +141,7 @@ def main(stdscr):
     recv_thread.start()
 
     arrow_pos = 0
-    move_window = curses.newwin(4, 32, 7, 0)
+    move_window = curses.newwin(4, 32, 8, 0)
     move_curser(arrow_pos, move_window)
     #TODO need to make sure cursor ends up here. Mitigated by using stdscr?
     while True:

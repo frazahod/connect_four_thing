@@ -52,7 +52,7 @@ def accept_connections():
             pending_connections = []
 
 class Player():
-
+    #TODO handle socket closure in send and recieve
     def __init__(self, connection, icon):
         logging.info('Player created')
         threading.Thread.__init__(self)
@@ -104,7 +104,7 @@ class gameThread(threading.Thread):
         threading.Thread.__init__(self)
         self.connections = connections
         self.board = [['.' for j in range(6)] for i in range(7)]
-        self.player1 = Player(connections[0], '#')
+        self.player1 = Player(connections[0], '0')
         self.player2 = Player(connections[1], '@')
         self.player_map = {
             connections[0][0].fileno(): self.player1,
@@ -119,6 +119,7 @@ class gameThread(threading.Thread):
 
 
     def start_game(self):
+        #TODO ADD CONTENT LENGTH EQUIVALENT YOU LAZY BASTARD!
         self.player1.queue_message(NAME, 'username')
         self.player2.queue_message(NAME, 'username')
         inputs = [self.player1.get_connection(), self.player2.get_connection()]
@@ -136,7 +137,7 @@ class gameThread(threading.Thread):
                         if self.player1.get_name() and self.player2.get_name():
                             self.player1.queue_message(MESSAGE, 'Connected with ' + self.player1.get_name())
                             self.player2.queue_message(MESSAGE, 'Connected with ' + self.player1.get_name())
-                            self.send_encoded_all(BOARD, stringy(self.board))
+                            self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
 
                     elif MOVE in response:
                         logging.info('got move')
@@ -144,7 +145,7 @@ class gameThread(threading.Thread):
                             position = int(response.replace(MOVE, '')) #TODO check that position is valid
                             logging.info('position: ' + str(position))
                             add_to_board(self.board, position, player.get_icon())
-                            self.send_encoded_all(BOARD, stringy(self.board))
+                            self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
                             self.turn = self.other(player)
                         else:
                             player.send_encoded(MESSAGE, "Wait your damn turn!")
