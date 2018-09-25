@@ -25,8 +25,8 @@ def handler(signum, frame):
     sys.exit(0)
 
 def print_board(board_window, board_str):
-    # board_window.clear()
     scr_lock.acquire(blocking=True)
+    board_window.clear()
     board_window.addstr(1, 0, board_str)
     # board_window.border()
     board_window.refresh()
@@ -51,7 +51,7 @@ class recvThread(threading.Thread):
 
 def recv_windows(stdcr):
     scr_lock.acquire(blocking=True)
-    BOARD_WINDOW_NLINES = 16
+    BOARD_WINDOW_NLINES = 8
     BOARD_WINDOW_NCOLS = 32
     board_window = curses.newwin(BOARD_WINDOW_NLINES, BOARD_WINDOW_NCOLS, 0, 0)
     board_window.border()

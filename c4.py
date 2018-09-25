@@ -145,6 +145,10 @@ class gameThread(threading.Thread):
                             position = int(response.replace(MOVE, '')) #TODO check that position is valid
                             logging.info('position: ' + str(position))
                             add_to_board(self.board, position, player.get_icon())
+                            if self.check_for_win(player.get_icon()):
+                                player.queue_message(BOARD, "GAME OVER\nYOU WIN!")
+                                self.other(player).queue_message(BOARD, "GAME OVER\n" + player.name + " WINS!\nYOU LOOSE!")
+                                continue
                             self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
                             self.turn = self.other(player)
                         else:
@@ -172,6 +176,29 @@ class gameThread(threading.Thread):
                 player = self.player_map[con.fileno()]
                 self.other.queue_message(MESSAGE, player.name + " has disconnected")
 
+
+    def try_four_times(self, start, direction, character):
+        x,y = start
+        p,m = direction
+        for i in range(0,3):
+            x += p
+            y += m
+            try: # Oof this is so lazy I am ashamed of it already....but it works!
+                if self.board[x][y] != character:
+                    return False
+            except:
+                return False
+        return True
+
+    def check_for_win(self, character):
+        dir_list = [(1,1), (1,0), (0,1), (1,-1), (0,-1)]
+        for x,row in enumerate(self.board):
+            for y,col in enumerate(self.board[x]):
+                if self.board[x][y] == character:
+                    for dir in dir_list:
+                        if self.try_four_times((x,y), dir, character):
+                            return True
+        return False
 
     def send_encoded_all(self, prefix, message):
         logging.info('Sending to all')
