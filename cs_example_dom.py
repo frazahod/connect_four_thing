@@ -78,17 +78,20 @@ def recv_windows(stdcr):
         socket_lock.acquire(blocking=True)
         response = s.recv(2048).decode('utf-8')
         socket_lock.release()
-        tag, msg = response.split('::', 1)  # Only splits on first instance of delimiter
-        if (tag == 'board'):
-            board_str = msg
-            print_board(board_window, board_str)
-        elif (tag == 'message'):
-            msg = textwrap.fill(msg, 32)
-            wrap_count += (len(msg) / 30) + 1
-            chat_string = chat_string + '\n' + msg # https://stackoverflow.com/a/2523020/3754128 link for chat scrolling
-            if wrap_count >= 41: # I have literally zero idea why this is the correct number
-                chat_pad_pos += 1
-            print_chat(chat_pad, chat_string, chat_pad_pos)
+        if response:
+            tag, msg = response.split('::', 1)  # Only splits on first instance of delimiter
+            if (tag == 'board'):
+                board_str = msg
+                print_board(board_window, board_str)
+            elif (tag == 'message'):
+                msg = textwrap.fill(msg, 30)
+                wrap_count += (len(msg) / 30) + 1
+                chat_string = chat_string + '\n' + msg # https://stackoverflow.com/a/2523020/3754128 link for chat scrolling
+                if wrap_count >= 41: # I have literally zero idea why this is the correct number
+                    chat_pad_pos += 1
+                print_chat(chat_pad, chat_string, chat_pad_pos)
+        else:
+            return
 
 
 def move_curser(pos, move_window):
@@ -145,6 +148,7 @@ def main(stdscr):
     move_curser(arrow_pos, move_window)
     #TODO need to make sure cursor ends up here. Mitigated by using stdscr?
     while True:
+        if not recv_thread.is_alive(): return
         key = stdscr.getkey()
         if key == "KEY_LEFT":
             arrow_pos = (arrow_pos - 4) if arrow_pos > 3 else 24
@@ -160,7 +164,8 @@ def main(stdscr):
             message = print_chat_entry(stdscr)
             if '!quit' in message:
                 s.send(('quit::' + 'SIGTERM').encode('ascii'))
-                sys.exit(0)
+                recv_thread.join()
+                return
             else:
                 send_message(message)
 

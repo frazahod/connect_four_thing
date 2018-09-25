@@ -124,7 +124,7 @@ class gameThread(threading.Thread):
         self.player2.queue_message(NAME, 'username')
         inputs = [self.player1.get_connection(), self.player2.get_connection()]
         outputs = []
-        while not self.shutting_down:
+        while not self.shutting_down or self.player1.message_queue or self.player2.message_queue:
             readable, writable, exceptional = select.select(inputs, inputs, inputs)
             # print(self.player_map)
             for con in readable:
@@ -148,9 +148,10 @@ class gameThread(threading.Thread):
                             if self.check_for_win(player.get_icon()):
                                 player.queue_message(BOARD, "GAME OVER\nYOU WIN!")
                                 self.other(player).queue_message(BOARD, "GAME OVER\n" + player.name + " WINS!\nYOU LOOSE!")
-                                continue
-                            self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
-                            self.turn = self.other(player)
+                                self.shutting_down = True
+                            else:
+                                self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
+                                self.turn = self.other(player)
                         else:
                             player.send_encoded(MESSAGE, "Wait your damn turn!")
                     elif MESSAGE in response:
@@ -162,7 +163,7 @@ class gameThread(threading.Thread):
                         self.send_encoded_all(MESSAGE, player.get_name() + ' gave up........like the pansy they are!')
                         self.shutting_down = True
                 else:
-                    player.queue_message(MESSAGE, self.other(player).get_name() + " closed connection. Ending game.")
+                    self.other(player).queue_message(MESSAGE, player.get_name() + " closed connection. Ending game.")
                     self.shutting_down = True
 
             for con in writable:
@@ -176,6 +177,8 @@ class gameThread(threading.Thread):
                 player = self.player_map[con.fileno()]
                 self.other.queue_message(MESSAGE, player.name + " has disconnected")
 
+        self.player1.get_connection().close()
+        self.player2.get_connection().close()
 
     def try_four_times(self, start, direction, character):
         x,y = start
