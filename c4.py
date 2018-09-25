@@ -135,7 +135,7 @@ class gameThread(threading.Thread):
                         logging.info('got name')
                         player.set_name(response.replace(NAME, ''))
                         if self.player1.get_name() and self.player2.get_name():
-                            self.player1.queue_message(MESSAGE, 'Connected with ' + self.player1.get_name())
+                            self.player1.queue_message(MESSAGE, 'Connected with ' + self.player2.get_name())
                             self.player2.queue_message(MESSAGE, 'Connected with ' + self.player1.get_name())
                             self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
 
@@ -150,8 +150,8 @@ class gameThread(threading.Thread):
                                 self.other(player).queue_message(BOARD, "GAME OVER\n" + player.name + " WINS!\nYOU LOOSE!")
                                 self.shutting_down = True
                             else:
-                                self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
                                 self.turn = self.other(player)
+                                self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
                         else:
                             player.send_encoded(MESSAGE, "Wait your damn turn!")
                     elif MESSAGE in response:
