@@ -29,27 +29,26 @@ def accept_connections():
     server_socket.bind(('', 8191))
     server_socket.listen(5)
 
-    pending_connections = []
+    # pending_connections = []
     active_games = []
+    waiting_player = None
 
     while True:
         client_connection = server_socket.accept()
         logging.info('Accepted connection')
-        # client_connection[0].setblocking(0)
         print('received connection')
-        if not pending_connections:
+        if not waiting_player:
             logging.info('waiting for player2')
-            pending_connections.append(client_connection)
-            client_connection[0].send((MESSAGE + 'Waiting for other player...').encode('ascii')) # TODO: Not this
+            waiting_player = Player(client_connection, '0')
         else:
             logging.info('player2 found')
-            pair = (pending_connections[0], client_connection)
-            pending_connections.pop()
+            player2 = Player(client_connection, '@')
+            pair = (waiting_player, player2)
             game_thread = gameThread(pair)
             logging.info('Starting game Thread')
             game_thread.start()
             active_games.append(game_thread)
-            pending_connections = []
+            waiting_player = None
 
 class Player():
     #TODO handle socket closure in send and recieve
@@ -61,6 +60,7 @@ class Player():
         self.name = None
         self.icon = icon
         self.message_queue = [] # TODO Use actual queue at some point?
+        self.resp_buffer = ''
 
     def set_name(self, name):
         self.name = name
@@ -73,21 +73,20 @@ class Player():
 
     def get_response(self):
         logging.info('recving')
-        return self.connection[0].recv(2048).rstrip().decode("utf-8")
+        while '\r\n' not in self.resp_buffer:
+            self.resp_buffer += self.connection[0].recv(2048).decode('utf-8')
+        parsed = self.resp_buffer.split('\r\n')
+        response = parsed[0]
+        self.resp_buffer = parsed[1]
+        return response
+        # return self.connection[0].recv(2048).rstrip().decode("utf-8")
 
     def get_icon(self):
         return self.icon
 
-    def send_encoded(self, prefix, message):
-        logging.info('sending message')
-        try:
-            self.connection[0].send((prefix + message).encode('ascii'))
-        except socket.error as err:
-            return err
-
     def queue_message(self, prefix, message):
         # logging.info('added message to queue ' + message)
-        self.message_queue.append(prefix + message)
+        self.message_queue.append(prefix + message + '\r\n')
 
     def empty_queue(self):
         for message in self.message_queue:
@@ -100,15 +99,14 @@ class Player():
 
 class gameThread(threading.Thread):
     game_lock = threading.Lock()
-    def __init__(self, connections):
+
+    def __init__(self, player_pair):
         threading.Thread.__init__(self)
-        self.connections = connections
+        self.player1, self.player2 = player_pair
         self.board = [['.' for j in range(6)] for i in range(7)]
-        self.player1 = Player(connections[0], '0')
-        self.player2 = Player(connections[1], '@')
         self.player_map = {
-            connections[0][0].fileno(): self.player1,
-            connections[1][0].fileno(): self.player2
+            self.player1.get_connection().fileno(): self.player1,
+            self.player2.get_connection().fileno(): self.player2
         }
         self.turn = self.player1
         self.shutting_down = False
@@ -153,7 +151,7 @@ class gameThread(threading.Thread):
                                 self.turn = self.other(player)
                                 self.send_encoded_all(BOARD, 'Turn: ' + self.turn.name + '\n' + stringy(self.board))
                         else:
-                            player.send_encoded(MESSAGE, "Wait your damn turn!")
+                            player.queue_message(MESSAGE, "Wait your damn turn!")
                     elif MESSAGE in response:
                         logging.info('got message')
                         to_send = response.replace(MESSAGE, player.get_name() + ': ')
@@ -226,8 +224,6 @@ def add_to_board(board, row, player):
 
 
 def stringy(array):
-    # temp = [0, 1, 2, 3, 4, 5, 6]
-    # list1 = ''.join(['{:4}'.format(item) for item in temp]) + '\n\n'
     array = reversed(list(zip(*array)))
     return '\n'.join([''.join(['{:4}'.format(item) for item in row])
                               for row in array])

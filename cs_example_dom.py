@@ -1,4 +1,4 @@
-#!/usr/bin/env python3 
+#!/usr/bin/env python3
 import curses
 from curses import wrapper
 from curses.textpad import Textbox
@@ -74,16 +74,22 @@ def recv_windows(stdcr):
 
     wrap_count = 0
     # time.sleep(25)
+    resp_buffer = ''
     while True:
         socket_lock.acquire(blocking=True)
-        response = s.recv(2048).decode('utf-8')
+        while '\r\n' not in resp_buffer:
+            resp_buffer += s.recv(2048).decode('utf-8')
+        parsed = resp_buffer.split('\r\n')
+        response = parsed[0]
+        resp_buffer = parsed[1]
+        # response = s.recv(2048).decode('utf-8')
         socket_lock.release()
-        if response:
+        if response and '::' in response:
             tag, msg = response.split('::', 1)  # Only splits on first instance of delimiter
-            if (tag == 'board'):
+            if tag == 'board':
                 board_str = msg
                 print_board(board_window, board_str)
-            elif (tag == 'message'):
+            elif tag == 'message':
                 msg = textwrap.fill(msg, 30)
                 wrap_count += (len(msg) / 30) + 1
                 chat_string = chat_string + '\n' + msg # https://stackoverflow.com/a/2523020/3754128 link for chat scrolling
@@ -119,24 +125,26 @@ def print_chat_entry(stdscr):
 
 def send_message(message):
     # socket_lock.acquire(blocking=True)
-    s.send(('message::' + message).encode('ascii')) # POSIX something something, atomic something something.
+    s.send(('message::' + message + '\r\n').encode('ascii')) # POSIX something something, atomic something something.
     # socket_lock.release()
 
 def send_move(pos):
-    s.send(('move::' + str(pos)).encode('ascii'))
+    s.send(('move::' + str(pos) + '\r\n').encode('ascii'))
 
 def main(stdscr):
-    # username = get_username(stdscr)
     curses.curs_set(0)
     print("Waiting for player 2")
+    resp_buffer = ''
     while True: # Wait for server to ask for username
-        response = s.recv(2048).decode('utf-8')
-        if response:
+        while '\r\n' not in resp_buffer:
+            resp_buffer += s.recv(2048).decode('utf-8')
+        parsed = resp_buffer.split('\r\n')
+        response = parsed[0]
+        resp_buffer = parsed[1]
+        if response and '::' in response:
             tag, msg = response.split('::', 1)  # Only splits on first instance of delimiter
-            # print_board(board_window, msg)
-            if (tag == 'name'):
-                # print("server asked for name, sending")
-                s.send(('name::' + user).encode('ascii'))
+            if tag == 'name':
+                s.send(('name::' + user + '\r\n').encode('ascii'))
                 break
 
 
