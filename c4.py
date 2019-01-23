@@ -14,13 +14,13 @@ MOVE = 'move::'
 BOARD = 'board::'
 QUIT = 'quit::'
 
-def safe_send(socket, message):
+
+def safe_send(the_socket, message):
     try:
-        socket.send(message)
-        return None
+        the_socket.send(message)
     except socket.error as err:
         logging.error("Socket error" + err.message)
-        return
+
 
 def accept_connections():
     logging.info('Starting server')
@@ -29,12 +29,11 @@ def accept_connections():
     server_socket.bind(('', 8191))
     server_socket.listen(5)
 
-    # pending_connections = []
     active_games = []
     waiting_player = None
 
     while True:
-        client_connection = server_socket.accept()
+        client_connection = server_socket.accept()  # type: Tuple[socket, address]
         logging.info('Accepted connection')
         print('received connection')
         if not waiting_player:
@@ -44,22 +43,23 @@ def accept_connections():
             logging.info('player2 found')
             player2 = Player(client_connection, '@')
             pair = (waiting_player, player2)
-            game_thread = gameThread(pair)
+            game_thread = GameThread(pair)
             logging.info('Starting game Thread')
             game_thread.start()
             active_games.append(game_thread)
             waiting_player = None
 
-class Player():
-    #TODO handle socket closure in send and recieve
+
+class Player:
+    # TODO handle socket closure in send and recieve
     def __init__(self, connection, icon):
+        # type: (Tuple[socket, address], char) -> None
         logging.info('Player created')
-        threading.Thread.__init__(self)
         self.connection = connection
         self.player_lock = threading.Lock()
         self.name = None
         self.icon = icon
-        self.message_queue = [] # TODO Use actual queue at some point?
+        self.message_queue = []
         self.resp_buffer = ''
 
     def set_name(self, name):
@@ -79,7 +79,6 @@ class Player():
         response = parsed[0]
         self.resp_buffer = parsed[1]
         return response
-        # return self.connection[0].recv(2048).rstrip().decode("utf-8")
 
     def get_icon(self):
         return self.icon
@@ -94,16 +93,13 @@ class Player():
         self.message_queue = []
 
 
-
-
-
-class gameThread(threading.Thread):
+class GameThread(threading.Thread):
     game_lock = threading.Lock()
 
     def __init__(self, player_pair):
         threading.Thread.__init__(self)
         self.player1, self.player2 = player_pair
-        self.board = [['.' for j in range(6)] for i in range(7)]
+        self.board = [['.' for _ in range(6)] for _ in range(7)]
         self.player_map = {
             self.player1.get_connection().fileno(): self.player1,
             self.player2.get_connection().fileno(): self.player2
@@ -115,21 +111,17 @@ class gameThread(threading.Thread):
         logging.info('Thread has started')
         self.start_game()
 
-
     def start_game(self):
-        #TODO ADD CONTENT LENGTH EQUIVALENT YOU LAZY BASTARD!
         self.player1.queue_message(NAME, 'username')
         self.player2.queue_message(NAME, 'username')
         inputs = [self.player1.get_connection(), self.player2.get_connection()]
-        outputs = []
         while not self.shutting_down or self.player1.message_queue or self.player2.message_queue:
             readable, writable, exceptional = select.select(inputs, inputs, inputs)
-            # print(self.player_map)
             for con in readable:
                 player = self.player_map[con.fileno()]
                 response = player.get_response()
                 if response:
-                    if NAME in response: #TODO don't accept other commands until Names are set
+                    if NAME in response:  # TODO don't accept other commands until Names are set
                         logging.info('got name')
                         player.set_name(response.replace(NAME, ''))
                         if self.player1.get_name() and self.player2.get_name():
@@ -140,12 +132,13 @@ class gameThread(threading.Thread):
                     elif MOVE in response:
                         logging.info('got move')
                         if player == self.turn:
-                            position = int(response.replace(MOVE, '')) #TODO check that position is valid
+                            position = int(response.replace(MOVE, ''))  # TODO check that position is valid
                             logging.info('position: ' + str(position))
                             add_to_board(self.board, position, player.get_icon())
                             if self.check_for_win(player.get_icon()):
                                 player.queue_message(BOARD, "GAME OVER\nYOU WIN!")
-                                self.other(player).queue_message(BOARD, "GAME OVER\n" + player.name + " WINS!\nYOU LOOSE!")
+                                self.other(player).queue_message(BOARD, "GAME OVER\n" + player.name + "WINS!\nYOU "
+                                                                                                      "LOOSE!")
                                 self.shutting_down = True
                             else:
                                 self.turn = self.other(player)
@@ -179,25 +172,25 @@ class gameThread(threading.Thread):
         self.player2.get_connection().close()
 
     def try_four_times(self, start, direction, character):
-        x,y = start
-        p,m = direction
-        for i in range(0,3):
+        x, y = start
+        p, m = direction
+        for i in range(0, 3):
             x += p
             y += m
-            try: # Oof this is so lazy I am ashamed of it already....but it works!
+            try:
                 if self.board[x][y] != character:
                     return False
-            except:
+            except IndexError:  # Out of bounds, hahaha this is bad and I should feel bad.
                 return False
         return True
 
     def check_for_win(self, character):
-        dir_list = [(1,1), (1,0), (0,1), (1,-1), (0,-1)]
-        for x,row in enumerate(self.board):
-            for y,col in enumerate(self.board[x]):
+        dir_list = [(1, 1), (1, 0), (0, 1), (1, -1), (0, -1)]
+        for x, row in enumerate(self.board):
+            for y, col in enumerate(self.board[x]):
                 if self.board[x][y] == character:
-                    for dir in dir_list:
-                        if self.try_four_times((x,y), dir, character):
+                    for vector in dir_list:
+                        if self.try_four_times((x, y), vector, character):
                             return True
         return False
 
@@ -213,28 +206,25 @@ class gameThread(threading.Thread):
             return self.player1
 
 
-
 def add_to_board(board, row, player):
     brow = board[row]
-    for idx,item in enumerate(brow):
+    for idx, item in enumerate(brow):
         if item == '.':
             brow[idx] = player
             break
 
 
-
 def stringy(array):
     array = reversed(list(zip(*array)))
     return '\n'.join([''.join(['{:4}'.format(item) for item in row])
-                              for row in array])
+                      for row in array])
+
 
 def print_array(array):
     array = reversed(list(zip(*array)))
     print('\n'.join([''.join(['{:4}'.format(item) for item in row])
-      for row in array]))
+                     for row in array]))
+
 
 logging.basicConfig(format='%(levelname)s:%(pathname)s:%(lineno)d %(message)s', stream=sys.stdout, level=logging.INFO)
 accept_connections()
-
-
-# listen()
