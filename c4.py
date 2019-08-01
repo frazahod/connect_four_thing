@@ -17,7 +17,12 @@ QUIT = 'quit::'
 
 def safe_send(the_socket, message):
     try:
-        the_socket.send(message)
+        size = len(message)
+        while size:
+            sent = the_socket.send(message)
+            size -= sent
+            message = message[:-sent]
+
     except socket.error as err:
         logging.error("Socket error" + err.message)
 
@@ -51,7 +56,7 @@ def accept_connections():
 
 
 class Player:
-    # TODO handle socket closure in send and recieve
+    # TODO handle socket closure in send and receive
     def __init__(self, connection, icon):
         # type: (Tuple[socket, address], char) -> None
         logging.info('Player created')
@@ -84,12 +89,12 @@ class Player:
         return self.icon
 
     def queue_message(self, prefix, message):
-        # logging.info('added message to queue ' + message)
         self.message_queue.append(prefix + message + '\r\n')
 
     def empty_queue(self):
         for message in self.message_queue:
-            self.connection[0].send(message.encode('ascii'))
+            encoded = message.encode('ascii')
+            safe_send(self.connection[0], encoded)
         self.message_queue = []
 
 
